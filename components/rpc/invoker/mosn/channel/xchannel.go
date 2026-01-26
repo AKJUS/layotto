@@ -236,12 +236,6 @@ func (m *xChannel) Invoke(req *rpc.RPCRequest) (*rpc.RPCResponse, error) {
 	}
 
 	callChan := make(chan call, 1)
-	// set timeout
-	deadline, _ := ctx.Deadline()
-	if err := conn.SetWriteDeadline(deadline); err != nil {
-		m.pool.Put(conn, true)
-		return nil, common.Error(common.UnavailebleCode, err.Error())
-	}
 	// register response channel
 	if frame.GetStreamType() != api.RequestOneWay {
 		xstate.mu.Lock()
@@ -371,15 +365,16 @@ func (m *xChannel) sendHeartbeat(c *wrapConn) {
 				return
 			}
 			if _, err := c.Write(buf.Bytes()); err != nil {
+				log.DefaultLogger.Warnf("[RPC][Runtime] Heartbeat request failed due to error: %+v", err)
 				failCount++
 				if failCount >= maxFailCount {
-					log.DefaultLogger.Errorf("[RPC][Runtime] Heartbeat response failed due to error: %+v. The number of consecutive failures (%d) exceeds the maximum allowed (%d). Closing the connection.", err, failCount, maxFailCount)
+					log.DefaultLogger.Errorf("[RPC][Runtime] Heartbeat request failed due to error: %+v. The number of consecutive failures (%d) exceeds the maximum allowed (%d). Closing the connection.", err, failCount, maxFailCount)
 					c.close()
 					return
 				}
 				continue
 			}
-			log.DefaultLogger.Debugf("[runtime][rpc] pong request success")
+			log.DefaultLogger.Infof("[runtime][rpc] pong request success")
 			failCount = 0
 		case <-c.cancelCtx.Done():
 			return
